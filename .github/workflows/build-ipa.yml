@@ -19,6 +19,8 @@ env:
 jobs:
   build:
     runs-on: macos-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v5
 
@@ -40,9 +42,17 @@ jobs:
           python3 -m pip install --break-system-packages git+https://github.com/asdfzxcvbn/pyzule-rw.git
 
       - name: Download IPA
+        env:
+          GH_TOKEN: ${{ github.token }}
+          IPA_DRAFT: ${{ inputs.ipa_url }}
         run: |
           mkdir -p ipa
-          curl -fsSL "${{ inputs.ipa_url }}" -o ipa/spotify.ipa
+          case "${{ inputs.ipa_url }}" in
+            draft:*)
+              ASSET=$(gh api "repos/${{ github.repository }}/releases" --jq '.[] | select(.draft and .name == "'"${IPA_DRAFT#draft:}"'") | .assets[0].id')
+              gh api -H "Accept: application/octet-stream" "repos/${{ github.repository }}/releases/assets/$ASSET" > ipa/spotify.ipa ;;
+            *) curl -fsSL "${{ inputs.ipa_url }}" -o ipa/spotify.ipa ;;
+          esac
           case "$(file --mime-type -b ipa/spotify.ipa)" in application/zip|application/x-ios-app) ;; *) echo "::error::Not an IPA"; exit 1 ;; esac
 
       - run: make release
